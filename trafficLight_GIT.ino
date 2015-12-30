@@ -37,7 +37,7 @@ long int greenFor=25*60, yellowFor=4.5*60; //vars for timing light changes (in s
 unsigned int redEvent, yellowEvent;  //for holding references to timers so they can be stopped prematurely
 unsigned int tickEvent; //event reference 
 unsigned long int secondsPassed;  //accumulator for time passed in running set
-bool runningSet, buttonActive; //other state variables
+bool runningSet; //other state variables
 
 enum MODES_enum {AUTO_MODE=0, MAN_MODE=1};
 MODES_enum mode;
@@ -94,7 +94,6 @@ void setup() {
   all_on();
   delay(second);
   all_off();
-  buttonActive = false;
 
 
   lcd.setCursor(0,0);
@@ -117,51 +116,39 @@ void setup() {
 void loop() {
 
   if(mode == AUTO_MODE){//start stop check button (BUTTON1 HANDLER)
-    if(!buttonActive && (bb1.read()==LOW)){
+    if(bb1.fell()){
       if(!runningSet){
         start_set();
        }
       else if(runningSet){
         stop_set();
       }
-      buttonActive=true;
     }
 
   }
   
-  if(!buttonActive && (bb2.read()==LOW)){//BUTTON 2 HANDLER
+  if(bb2.fell()){//BUTTON 2 HANDLER
     if(!runningSet){
       changeMode();   
     }
-    buttonActive=true;
   }
-  else if(!buttonActive && (bc.read()==LOW)){//BUTTON RIGHT HANDLER
+  else if(bc.fell())){//BUTTON RIGHT HANDLER
     //encoder click
     set_delays(ECLICK);
-    buttonActive=true;
   }
-  else if(!buttonActive && (bu.read()==LOW)){//BUTTON DOWN HANDLER
+  else if(bu.fell()){//BUTTON DOWN HANDLER
     //encoder right
     set_delays(INCREASE);
-    buttonActive=true;
   }
-  else if(!buttonActive && (bd.read()==LOW)){//BUTTON UP HANDLER
+  else if(bd.fell()){//BUTTON UP HANDLER
     //encoder left
     set_delays(DECREASE);
-    buttonActive=true;
   }
 
 //for potentiometer setting
 //  if(selectedInterval != SET_NO_INTERVAL){
 //    analog_update_interval(map(analogRead(POTPIN), 1023, 0, 0, 6000));
 //  }
-  
-
-  if(buttonActive){
-    if(bb1.read()==HIGH && bb2.read()==HIGH && bd.read()==HIGH && bc.read()==HIGH && bu.read()==HIGH){
-      buttonActive=false;
-    }
-  }
   
   t.update(); //necessary to update timer
   bb1.update();
@@ -173,6 +160,7 @@ void loop() {
 
 void changeMode(){
   if(mode == AUTO_MODE){
+    selectedInterval = SET_NO_INTERVAL;
     mode = MAN_MODE;
     if(runningSet){
       stop_set();

@@ -132,7 +132,7 @@ void loop() {
       changeMode();   
     }
   }
-  else if(bc.fell())){//BUTTON RIGHT HANDLER
+  else if(bc.fell()){//BUTTON RIGHT HANDLER
     //encoder click
     set_delays(ECLICK);
   }

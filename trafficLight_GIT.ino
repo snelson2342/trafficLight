@@ -32,7 +32,7 @@
 
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 Timer t; //object for timing
-Bounce bb1, bb2, bu, bd, bc;
+Bounce bb1, bb2, ea, eb, bc;
 long int greenFor=25*60, yellowFor=4.5*60; //vars for timing light changes (in seconds)
 unsigned int redEvent, yellowEvent;  //for holding references to timers so they can be stopped prematurely
 unsigned int tickEvent; //event reference 
@@ -58,8 +58,8 @@ void setup() {
   //call constructors for bonces
   bb1 = Bounce();
   bb2 = Bounce();
-  bu = Bounce();
-  bd = Bounce();
+  ea = Bounce();
+  eb = Bounce();
   bc = Bounce();
 
   //output setup
@@ -75,12 +75,12 @@ void setup() {
   bc.interval(5);
   pinMode(eup, INPUT);
   digitalWrite(eup, HIGH);
-  bu.attach(eup);
-  bu.interval(1);
+  ea.attach(eup);
+  ea.interval(0);
   pinMode(edown, INPUT);
   digitalWrite(edown, HIGH);
-  bd.attach(edown);
-  bd.interval(1);
+  eb.attach(edown);
+  eb.interval(0);
   pinMode(b2, INPUT);
   digitalWrite(b2, HIGH);
   bb2.attach(b2);
@@ -92,7 +92,7 @@ void setup() {
 
   //power on self test haha
   all_on();
-  delay(second);
+  delay(second/2);
   all_off();
 
 
@@ -100,14 +100,14 @@ void setup() {
   lcd.print("Created by");
   lcd.setCursor(0,1);
   lcd.print("Sam Nelson");
-  delay(2000);
+  delay(1000);
   lcd.clear();
   for(int i=20; i>=0; i--){
     lcd.setCursor(i,0);
     lcd.print("Brian sucks.");
-    delay(100);
+    delay(50);
   }
-  delay(1000);
+  delay(100);
   
   update_screen();
   on(STATUSPIN);
@@ -127,22 +127,14 @@ void loop() {
 
   }
   
-  if(bb2.fell()){//BUTTON 2 HANDLER
+  if(bb2.fell()){//BUTTON 2 HANDLER mode
     if(!runningSet){
       changeMode();   
     }
   }
-  else if(bc.fell()){//BUTTON RIGHT HANDLER
+  else if(bc.fell()){//encoder click HANDLER
     //encoder click
     set_delays(ECLICK);
-  }
-  else if(bu.fell()){//BUTTON DOWN HANDLER
-    //encoder right
-    set_delays(INCREASE);
-  }
-  else if(bd.fell()){//BUTTON UP HANDLER
-    //encoder left
-    set_delays(DECREASE);
   }
 
 //for potentiometer setting
@@ -154,8 +146,12 @@ void loop() {
   bb1.update();
   bb2.update();
   bc.update();
-  bu.update();
-  bd.update();
+  ea.update();
+  eb.update();
+  
+  //rotary encoder
+  if(ea.rose() && eb.read() == LOW) set_delays(INCREASE);
+  if(eb.fell() && ea.read() == HIGH) set_delays(DECREASE);
 }
 
 void changeMode(){

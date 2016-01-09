@@ -21,8 +21,8 @@
 //#define POTPIN    A0
 //buttons
 #define eclick    7
-#define eup       9
-#define edown     8
+#define ecodea	  3
+#define ecodeb    8
 #define b1        12
 #define b2        11
 //natural constants for computations
@@ -32,7 +32,8 @@
 
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 Timer t; //object for timing
-Bounce bb1, bb2, ea, eb, bc;
+Bounce bb1, bb2, bc;
+volatile int encoderNotches=0;
 long int greenFor=25*60, yellowFor=4.5*60; //vars for timing light changes (in seconds)
 unsigned int redEvent, yellowEvent;  //for holding references to timers so they can be stopped prematurely
 unsigned int tickEvent; //event reference 
@@ -41,8 +42,6 @@ bool runningSet; //other state variables
 
 enum MODES_enum {AUTO_MODE=0, MAN_MODE=1};
 MODES_enum mode;
-
-enum ENCODER_opt {ECLICK=0, INCREASE=1, DECREASE=2};
 
 enum SELECTED_interval {SET_NO_INTERVAL=0, SET_GREEN_INTERVAL=1, SET_YELLOW_INTERVAL=2};
 SELECTED_interval selectedInterval = SET_NO_INTERVAL;
@@ -58,8 +57,6 @@ void setup() {
   //call constructors for bonces
   bb1 = Bounce();
   bb2 = Bounce();
-  ea = Bounce();
-  eb = Bounce();
   bc = Bounce();
 
   //output setup
@@ -73,14 +70,10 @@ void setup() {
   digitalWrite(eclick, HIGH);
   bc.attach(eclick);
   bc.interval(5);
-  pinMode(eup, INPUT);
-  digitalWrite(eup, HIGH);
-  ea.attach(eup);
-  ea.interval(0);
-  pinMode(edown, INPUT);
-  digitalWrite(edown, HIGH);
-  eb.attach(edown);
-  eb.interval(0);
+  pinMode(ecodea, INPUT);
+  digitalWrite(ecodea, HIGH);
+  pinMode(ecodeb, INPUT);
+  digitalWrite(ecodeb, HIGH);
   pinMode(b2, INPUT);
   digitalWrite(b2, HIGH);
   bb2.attach(b2);
@@ -89,6 +82,8 @@ void setup() {
   digitalWrite(b1, HIGH);
   bb1.attach(b1);
   bb1.interval(5);
+
+//  enable_encoder_interrupt();
 
   //power on self test haha
   all_on();
@@ -134,120 +129,121 @@ void loop() {
   }
   else if(bc.fell()){//encoder click HANDLER
     //encoder click
-    set_delays(ECLICK);
+    encoder_press();
   }
 
-//for potentiometer setting
-//  if(selectedInterval != SET_NO_INTERVAL){
-//    analog_update_interval(map(analogRead(POTPIN), 1023, 0, 0, 6000));
-//  }
-  
+  if(encoderNotches != 0){
+    alter_delay();
+  }
+
   t.update(); //necessary to update timer
   bb1.update();
   bb2.update();
   bc.update();
-  ea.update();
-  eb.update();
-  
-  //rotary encoder
-  if(ea.rose() && eb.read() == LOW) set_delays(INCREASE);
-  if(eb.fell() && ea.read() == HIGH) set_delays(DECREASE);
 }
 
 void changeMode(){
   if(mode == AUTO_MODE){
     selectedInterval = SET_NO_INTERVAL;
     mode = MAN_MODE;
-    if(runningSet){
+    enable_encoder_interrupt();
+    if(runningSet){//never reached, that's ok, handled elsewhere CYA
       stop_set();
     }
   }
   else{
     mode = AUTO_MODE;
+    dissable_encoder_interrupt();
     all_off();
   }
   update_screen();
 }
 
-//void analog_update_interval(int value){
-//  if(selectedInterval == SET_GREEN_INTERVAL){
-//    greenFor=value;
-//  }
-//  else if(selectedInterval == SET_YELLOW_INTERVAL){
-//    yellowFor=value;
-//  }
-//  update_screen();
-//}
+void enable_encoder_interrupt(){
+  attachInterrupt(digitalPinToInterrupt(ecodea), encoderupt, FALLING);
+}
+void dissable_encoder_interrupt(){
+  detachInterrupt(digitalPinToInterrupt(ecodea));
+}
+void encoderupt(){
+  bool a,b;
+  a=digitalRead(ecodea);
+  b=digitalRead(ecodeb);
+  if(a) return;
+  delayMicroseconds(1000);
+  a=digitalRead(ecodea);
+  if(b!=digitalRead(ecodeb)) return;
+  if(a) return;
+  if(b){
+    encoderNotches++;
+  }
+  else{
+    encoderNotches--;
+  }
+}
 
-void set_delays(ENCODER_opt command){
-  //0-next interval 1-increase 2-decrease
+void encoder_press(){
+//  noInterrupts();
   if(!runningSet && mode==AUTO_MODE){
-    switch(command){
-      case 0:
-        switch(selectedInterval){
-          case SET_NO_INTERVAL:
-            selectedInterval=SET_GREEN_INTERVAL;
-            break;
-          case SET_GREEN_INTERVAL:
-            selectedInterval=SET_YELLOW_INTERVAL;
-            break;
-          case SET_YELLOW_INTERVAL:
-            selectedInterval=SET_NO_INTERVAL;
-            break;
-        }
+    switch(selectedInterval){
+      case SET_NO_INTERVAL:
+	selectedInterval=SET_GREEN_INTERVAL;
+        enable_encoder_interrupt();
+	break;
+      case SET_GREEN_INTERVAL:
+        selectedInterval=SET_YELLOW_INTERVAL;
         break;
-      case 1: //increase
-        switch(selectedInterval){
-          case SET_GREEN_INTERVAL:
-            greenFor+=INCREMENT_AMNT;
-            break;
-          case SET_YELLOW_INTERVAL:
-            yellowFor+=INCREMENT_AMNT;
-            break;
-        }
-        break;
-      case 2:
-        switch(selectedInterval){
-          case SET_GREEN_INTERVAL:
-            greenFor-=INCREMENT_AMNT;
-            if(greenFor<0) greenFor=0;
-            break;
-          case SET_YELLOW_INTERVAL:
-            yellowFor-=INCREMENT_AMNT;
-            if(yellowFor<0) yellowFor=0;
-            break;
-        }
-        break;
+      case SET_YELLOW_INTERVAL:
+        selectedInterval=SET_NO_INTERVAL;
+        dissable_encoder_interrupt();
+	break;
     }
     update_screen();
-    //UPDAE SCREEN DISPLAY
-    
   }
-  else if(mode == MAN_MODE){
-    //all_off();
-    switch(command){
-      case 0:
-        if(is_high(GREENPIN) && is_high(YELLOWPIN) && is_high(REDPIN)){
+  else if(mode==MAN_MODE){
+    if(is_high(GREENPIN) && is_high(YELLOWPIN) && is_high(REDPIN)){
           all_on();
-        }
-        else{
-          all_off();
-        }
+    }
+    else{
+      all_off();
+    }
+  }
+//  interrupts();
+}
+
+void alter_delay(){
+//  noInterrupts();
+  if(mode==MAN_MODE){
+    if(encoderNotches > 0){
+      if(!is_high(REDPIN)) {all_off();}
+      else if(!is_high(YELLOWPIN)) {switch_red();}
+      else if(!is_high(GREENPIN) ) {switch_yellow();}
+      else{switch_green();}
+    }
+    else if(encoderNotches < 0){
+      if(!is_high(REDPIN)) {switch_yellow();}
+      else if(!is_high(YELLOWPIN)) {switch_green();}
+      else if(!is_high(GREENPIN)) {all_off();}
+      else{switch_red();}
+    }
+    encoderNotches=0;
+  }
+  else if(!runningSet && mode==AUTO_MODE){
+    switch(selectedInterval){
+      case SET_GREEN_INTERVAL:
+        greenFor+=INCREMENT_AMNT * encoderNotches;
+	encoderNotches=0;
+        if(greenFor<0) greenFor=0;
         break;
-      case 1:
-        if(!is_high(REDPIN)) {all_off();}
-        else if(!is_high(YELLOWPIN)) {switch_red();}
-        else if(!is_high(GREENPIN) ) {switch_yellow();}
-        else{switch_green();}
-        break;
-      case 2:
-        if(!is_high(REDPIN)) {switch_yellow();}
-        else if(!is_high(YELLOWPIN)) {switch_green();}
-        else if(!is_high(GREENPIN)) {all_off();}
-        else{switch_red();}
+      case SET_YELLOW_INTERVAL:
+        yellowFor+=INCREMENT_AMNT * encoderNotches;
+        encoderNotches=0;
+	if(yellowFor<0) yellowFor=0;
         break;
     }
   }
+  update_screen();
+//  interrupts();
 }
 
 void update_screen(){
@@ -369,7 +365,8 @@ void start_set(){
   tickEvent = t.every(second, count_seconds);
   switch_green();
   runningSet=true;
-  selectedInterval=SET_NO_INTERVAL;  
+  selectedInterval=SET_NO_INTERVAL;
+  dissable_encoder_interrupt();  
 }
 
 

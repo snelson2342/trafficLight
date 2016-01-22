@@ -1,3 +1,4 @@
+#include <math.h>
 #include <Wire.h>
 #include <Adafruit_RGBLCDShield.h>
 #include <Bounce2.h> //for debouncing
@@ -33,7 +34,7 @@
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 Timer t; //object for timing
 Bounce bb1, bb2, bc;
-volatile int encoderNotches=0;
+volatile float encoderNotches=0;
 long int greenFor=25*60, yellowFor=4.5*60; //vars for timing light changes (in seconds)
 unsigned int redEvent, yellowEvent;  //for holding references to timers so they can be stopped prematurely
 unsigned int tickEvent; //event reference 
@@ -86,8 +87,8 @@ void setup() {
 //  enable_encoder_interrupt();
 
   //power on self test haha
-  all_on();
-  delay(second/2);
+//  all_on();
+//  delay(second/2);
   all_off();
 
 
@@ -133,7 +134,16 @@ void loop() {
   }
 
   if(encoderNotches != 0){
-    alter_delay();
+    int tmp;
+    if(encoderNotches<0){
+      tmp=floor(encoderNotches);
+    }
+    else{
+      tmp=ceil(encoderNotches);
+    }
+    if(abs(encoderNotches)>.5) tmp=tmp*abs(tmp);
+    alter_delay(tmp);
+    encoderNotches=0;
   }
 
   t.update(); //necessary to update timer
@@ -165,22 +175,24 @@ void enable_encoder_interrupt(){
 void dissable_encoder_interrupt(){
   detachInterrupt(digitalPinToInterrupt(ecodea));
 }
+
 void encoderupt(){
-  bool a,b;
-  a=digitalRead(ecodea);
-  b=digitalRead(ecodeb);
-  if(a) return;
-  delayMicroseconds(1000);
-  a=digitalRead(ecodea);
-  if(b!=digitalRead(ecodeb)) return;
-  if(a) return;
-  if(b){
-    encoderNotches++;
-  }
-  else{
-    encoderNotches--;
-  }
+    bool a,b;
+    a=digitalRead(ecodea);
+    b=digitalRead(ecodeb);
+    if(a) return;
+    delayMicroseconds(1000);
+    a=digitalRead(ecodea);
+    if(b!=digitalRead(ecodeb)) return;
+    if(a) return;
+    if(b){
+      encoderNotches+=.5;
+    }
+    else{
+      encoderNotches-=.5;
+    }
 }
+
 
 void encoder_press(){
 //  noInterrupts();
@@ -211,33 +223,30 @@ void encoder_press(){
 //  interrupts();
 }
 
-void alter_delay(){
+void alter_delay(int amnt){
 //  noInterrupts();
   if(mode==MAN_MODE){
-    if(encoderNotches > 0){
+    if(amnt > 0){
       if(!is_high(REDPIN)) {all_off();}
       else if(!is_high(YELLOWPIN)) {switch_red();}
       else if(!is_high(GREENPIN) ) {switch_yellow();}
       else{switch_green();}
     }
-    else if(encoderNotches < 0){
+    else if(amnt < 0){
       if(!is_high(REDPIN)) {switch_yellow();}
       else if(!is_high(YELLOWPIN)) {switch_green();}
       else if(!is_high(GREENPIN)) {all_off();}
       else{switch_red();}
     }
-    encoderNotches=0;
   }
   else if(!runningSet && mode==AUTO_MODE){
     switch(selectedInterval){
       case SET_GREEN_INTERVAL:
-        greenFor+=INCREMENT_AMNT * encoderNotches;
-	encoderNotches=0;
+        greenFor+=INCREMENT_AMNT * amnt;
         if(greenFor<0) greenFor=0;
         break;
       case SET_YELLOW_INTERVAL:
-        yellowFor+=INCREMENT_AMNT * encoderNotches;
-        encoderNotches=0;
+        yellowFor+=INCREMENT_AMNT * amnt;
 	if(yellowFor<0) yellowFor=0;
         break;
     }
